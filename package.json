@@ -25,6 +25,12 @@
   "build": {
     "appId": "com.example.teja-util",
     "productName": "teja util",
+    "protocols": [
+      {
+        "name": "TejaUtil Protocol",
+        "schemes": ["teja-util"]
+      }
+    ],
     "directories": {
       "output": "dist"
     },

@@ -1,4 +1,4 @@
-const { app, BrowserWindow,autoUpdater } = require("electron");
+const { app, BrowserWindow, autoUpdater, protocol } = require("electron");
 
 const express = require("express");
 const { spawn } = require("child_process");
@@ -7,19 +7,41 @@ const { WebSocketServer } = require("ws");
 const cors = require("cors");
 const https = require("https");
 const fs = require("fs");
-const path = require('path');
+const path = require("path");
 
+app.whenReady().then(() => {
+  protocol.handle("teja-util", (request, callback) => {
+    const url = request.url.replace("teja-util://", "");
+    console.log("Custom protocol URL:", url);
+  });
+  // Register the custom protocol
+  protocol.registerFileProtocol("teja-util", (request, callback) => {
+    const url = request.url.replace("teja-util://", "");
+    console.log("Custom protocol URL:", url);
 
-autoUpdater.on('update-available', () => {
-  console.log('Update available');
+    // You can handle the URL here, for example, by opening a specific window or navigating somewhere
+    // If needed, pass a file or resource to serve
+    callback({ path: "" }); // Serve appropriate resource if needed
+  });
+
+  console.log("Custom protocol teja-util:// registered");
+});
+app.setAsDefaultProtocolClient("teja-util");
+
+autoUpdater.on("update-available", () => {
+  console.log("Update available");
 });
 
-autoUpdater.on('update-downloaded', () => {
+autoUpdater.on("update-downloaded", () => {
   autoUpdater.quitAndInstall();
 });
 
 const PORT = 4593; // REST API at http://localhost:PORT
 const WSPORT = 4594; // WebSocket at ws://localhost:WSPORT
+
+const HTML_URL_FILE = `data:text/html,<html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>teja-util-daemon</title></head><body><h1>TEJA-UTIL DAEMON</h1><div id="sess"></div><div id="err"></div></body></html>`;
+const HTML_STYLE = `#sess{display:flex;flex-direction:column;gap:10px;}#sess.session{display:flex;flex-direction:row;gap:10px;}#err{color:#da1616}`;
+const HTML_SCRIPT = `const sess=document.querySelector("#sess");const fetchSessions=async()=>{try{const response=await fetch("http://localhost:${PORT}/sessions");const data=await response.json();data.forEach((session)=>{const sessDiv=document.createElement("div");sessDiv.classList.add("session");sessDiv.innerHTML="<div>Session ID: "+session.id+"</div><div>Command:"+session.command+"</div><div>Started At:"+session.startedAt+"</div>";sess.appendChild(sessDiv);})}catch(e){console.log(e);const errDiv=document.createElement("div");errDiv.innerHTML=e;document.querySelector("#err").appendChild(errDiv);}};setTimeout(()=>{setInterval(fetchSessions,1000)},2000);`;
 
 const appPath = app.getAppPath(); // Get the packaged app path
 const SSL_KEY_PATH = path.join(appPath, "ssl.key"); // Adjust path accordingly
@@ -35,47 +57,56 @@ const sessions = new Map(); // To store session IDs and their child processes
 
 // Create an Express server (for backward compatibility)
 const createServer = () => {
-  const server = express();
+  try {
+    const server = express();
+    server.use(express.json());
+    // CORS configuration
+    const allowedOrigins = [
+      "https://teja-util.netlify.app",
+      "http://localhost",
+      "http://127.0.0.1",
+    ];
+    const corsOptions = {
+      origin: (origin, callback) => {
+        console.log("Origin:", origin);
+        if (!origin || allowedOrigins.includes(origin)) {
+          console.log("Origin allowed:", origin);
+          callback(null, true);
+        } else {
+          console.log("Origin not allowed:", origin);
+          callback(new Error("Not allowed by CORS"));
+        }
+      },
+    };
 
-  // CORS configuration
-  const allowedOrigins = [
-    "https://teja-util.netlify.app",
-    "http://localhost",
-    "http://127.0.0.1",
-  ];
-  const corsOptions = {
-    origin: (origin, callback) => {
-      console.log("Origin:", origin);
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-  };
+    // server.use(cors(corsOptions));
 
-  server.use(cors(corsOptions));
+    /**
+     * Endpoint: Get information about all active sessions
+     * Method: GET /sessions
+     */
+    server.get("/sessions", (req, res) => {
+      console.log("GET /sessions");
+      const sessionData = Array.from(sessions.keys());
+      res.status(200).send(sessionData || "No sessions found");
+    });
 
-  /**
-   * Endpoint: Get information about all active sessions
-   * Method: GET /sessions
-   */
-  server.get("/sessions", (req, res) => {
-    const sessionData = Array.from(sessions.keys());
-    res.status(200).send(sessionData);
-  });
-
-  const httpsServer = https.createServer(httpsOptions, server);
-
-  httpsServer.listen(PORT, () => {
-    console.log(`REST API running at http://localhost:${PORT}`);
-  });
+    try {
+      server.listen(PORT, () => {
+        console.log(`REST API running at http://localhost:${PORT}`);
+      });
+    } catch (error) {
+      console.error("Failed to start server:", error);
+    }
+  } catch (error) {
+    console.error("Failed to maintain server:", error);
+  }
 };
 
 // Create a WebSocket server
 const createWebSocketServer = () => {
   const wss = new WebSocketServer({ port: WSPORT });
-  
+
   wss.on("connection", (ws) => {
     // Create a new session when a WebSocket connection is established
     const sessionId = crypto.randomUUID();
@@ -163,8 +194,8 @@ const createWebSocketServer = () => {
 // Create the Electron window
 const createWindow = () => {
   const win = new BrowserWindow({
-    width:"100%",
-    height:"100%",
+    width: "100%",
+    height: "100%",
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: true,
@@ -173,19 +204,21 @@ const createWindow = () => {
     },
   });
 
-  win.loadURL("http://teja-util.netlify.app"); // Load the React app
+  win.loadURL(HTML_URL_FILE); // Load the React app
+  win.webContents.insertCSS(HTML_STYLE);
+  win.webContents.executeJavaScript(HTML_SCRIPT);
 
+  win.autoHideMenuBar = true;
   // Fallback to localhost if loading fails
   win.webContents.on("did-fail-load", () => {
-    win.loadURL("http://localhost:3000");
+    win.loadURL("data:text/html,<html><body><h1>Failed to load the app.</h1></body></html>");
   });
-
 };
 app.on("ready", () => {
   createServer();
   createWebSocketServer();
   createWindow();
-  autoUpdater.checkForUpdatesAndNotify();
+  autoUpdater.checkForUpdates();
 });
 
 app.on("window-all-closed", () => {

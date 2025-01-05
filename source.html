@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>teja-util-daemon</title>
+    <style>
+      #sess {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      #sess .session {
+        display: flex;
+        flex-direction: row;
+        gap: 10px;
+      }
+      #err {
+        color: rgb(218, 22, 22);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>TEJA-UTIL DAEMON</h1>
+    <div id="sess"></div>
+    <div id="err"></div>
+    <script>
+      const sess = document.querySelector("#sess");
+
+      const fetchSessions = async () => {
+        try {
+          const response = await fetch("http://localhost:${PORT}/sessions");
+          const data = await response.json();
+          data.forEach((session) => {
+            const sessDiv = document.createElement("div");
+            sessDiv.classList.add("session");
+            sessDiv.innerHTML =
+              "<div>Session ID: " +
+              session.id +
+              "</div><div>Command:" +
+              session.command +
+              "</div><div>Started At:" +
+              session.startedAt +
+              "</div>";
+            sess.appendChild(sessDiv);
+          });
+        } catch (e) {
+          console.log(e);
+          const errDiv = document.createElement("div");
+          errDiv.innerHTML = e;
+          document.querySelector("#err").appendChild(errDiv);
+        }
+      };
+      setTimeout(() => {
+        setInterval(fetchSessions, 1000);
+      }, 2000);
+    </script>
+  </body>
+</html>
