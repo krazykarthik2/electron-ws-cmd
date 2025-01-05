@@ -1,0 +1,73 @@
+{
+  "name": "electron-cmd-runner",
+  "version": "1.0.1",
+  "description": "",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "electron main.js",
+    "build": "electron-builder --win"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "child_process": "^1.0.2",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "sudo-prompt": "^9.2.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.example.teja-util",
+    "productName": "teja util",
+    "directories": {
+      "output": "dist"
+    },
+    "publish": [{
+      "provider": "github",
+      "owner": "krazykarthik2", 
+      "repo": "electron-ws-cmd",
+      "releaseType": "release"
+    }],
+    "extraResources": [
+      {
+        "from": "ssl.key",
+        "to": "ssl.key",
+        "filter":["**/*"]
+      },
+      {
+        "from": "ssl.cert",
+        "to": "ssl.cert",
+        "filter":["**/*"]
+      },
+      {
+        "from": "ssl.csr",
+        "to": "ssl.csr",
+        "filter":["**/*"]
+      }
+    ],
+    "nsis": {
+      "allowElevation": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "oneClick":true
+    },
+    "files": [
+      "main.js",
+      "package.json",
+      "node_modules/**/*",
+      "ssl.key",
+      "ssl.cert",
+      "ssl.csr",
+      "**/*"
+    ],
+    "win": {
+      "target": "nsis"
+    }
+  }
+}
