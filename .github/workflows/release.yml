@@ -30,7 +30,9 @@ jobs:
         shell: pwsh
         
       - name: Build the app
-        run: npm run build # Ensure this script builds your app
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run build
 
       - name: Create Release
         id: create_release
