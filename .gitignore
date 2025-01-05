@@ -3,3 +3,6 @@
 /ssl.cert
 /ssl.csr
 /ssl.key
+/ssl.cert.base64
+/ssl.csr.base64
+/ssl.key.base64

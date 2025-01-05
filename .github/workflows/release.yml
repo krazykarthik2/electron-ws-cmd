@@ -1,0 +1,59 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '20.10.0'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Decode SSL Certificates
+        run: |
+          echo "${{ secrets.SSL_CERT_BASE64 }}" | base64 --decode > ssl.cert
+          echo "${{ secrets.SSL_KEY_BASE64 }}" | base64 --decode > ssl.key
+          echo "${{ secrets.SSL_CSR_BASE64 }}" | base64 --decode > ssl.csr
+
+      - name: Build the app
+        run: npm run build # Ensure this script builds your app
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ github.run_number }}
+          release_name: "Release v${{ github.run_number }}"
+          draft: false
+          prerelease: false
+
+      - name: Determining asset path
+        run: |
+          asset_path=$(find dist -name "teja util Setup*.exe" -print -quit)
+          echo "Uploading asset: $asset_path"
+          echo "::set-output name=asset_path::$asset_path"
+        shell: bash
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ steps.upload_release_asset.outputs.asset_path }}
+          asset_name: teja-util-Setup-${{ github.run_number }}.exe
+          asset_content_type: application/octet-stream
