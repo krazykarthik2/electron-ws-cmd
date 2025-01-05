@@ -50,9 +50,11 @@ jobs:
           asset_path=$(find dist -name "teja util Setup*.exe" -print -quit)
           echo "asset_path=$asset_path" >> $GITHUB_ENV
         shell: bash
-        
+
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ${{ env.asset_path }}
