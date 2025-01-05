@@ -21,12 +21,14 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+        
       - name: Decode SSL Certificates
         run: |
-          echo "${{ secrets.SSL_CERT_BASE64 }}" | base64 --decode > ssl.cert
-          echo "${{ secrets.SSL_KEY_BASE64 }}" | base64 --decode > ssl.key
-          echo "${{ secrets.SSL_CSR_BASE64 }}" | base64 --decode > ssl.csr
-
+          [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("${{ secrets.SSL_CERT_BASE64 }}")) | Out-File -FilePath ssl.cert -Encoding utf8
+          [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("${{ secrets.SSL_KEY_BASE64 }}")) | Out-File -FilePath ssl.key -Encoding utf8
+          [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("${{ secrets.SSL_CSR_BASE64 }}")) | Out-File -FilePath ssl.csr
+        shell: pwsh
+        
       - name: Build the app
         run: npm run build # Ensure this script builds your app
 
