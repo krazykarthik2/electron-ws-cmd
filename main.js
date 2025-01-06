@@ -39,9 +39,9 @@ autoUpdater.on("update-downloaded", () => {
 const PORT = 4593; // REST API at http://localhost:PORT
 const WSPORT = 4594; // WebSocket at ws://localhost:WSPORT
 
-const HTML_URL_FILE = `data:text/html,<html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>teja-util-daemon</title></head><body><h1>TEJA-UTIL DAEMON</h1><div id="sess"></div><div id="err"></div></body></html>`;
-const HTML_STYLE = `#sess{display:flex;flex-direction:column;gap:10px;}#sess.session{display:flex;flex-direction:row;gap:10px;}#err{color:#da1616}`;
-const HTML_SCRIPT = `const sess=document.querySelector("#sess");const fetchSessions=async()=>{try{const response=await fetch("http://localhost:${PORT}/sessions");const data=await response.json();data.forEach((session)=>{const sessDiv=document.createElement("div");sessDiv.classList.add("session");sessDiv.innerHTML="<div>Session ID: "+session.id+"</div><div>Command:"+session.command+"</div><div>Started At:"+session.startedAt+"</div>";sess.appendChild(sessDiv);})}catch(e){console.log(e);const errDiv=document.createElement("div");errDiv.innerHTML=e;document.querySelector("#err").appendChild(errDiv);}};setTimeout(()=>{setInterval(fetchSessions,1000)},2000);`;
+const HTML_URL_FILE = `data:text/html,<html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>teja-util-daemon</title></head><body><h1>TEJA-UTIL DAEMON</h1><button onclick="fetchSessions()">refresh</button><div id="sess"></div><div id="err"></div></body></html>`;
+const HTML_STYLE = `body{background:#000;color:#fff;font-family:sans-serif;}#sess{display:flex;flex-direction:column;gap:10px;}#sess.session{display:flex;flex-direction:row;gap:10px;}#err{color:#da1616}`;
+const HTML_SCRIPT = `const sess=document.querySelector("#sess");const fetchSessions=async()=>{try{const response=await fetch("http://localhost:${PORT}/sessions");const data=await response.json();sess.innerHTML=data.map((session)=>{return "<div class='session'>Session ID: "+session+"</div>"}).join("");}catch(e){console.log(e);const errDiv=document.createElement("div");errDiv.innerHTML=e;document.querySelector("#err").appendChild(errDiv);}};`;
 
 const appPath = app.getAppPath(); // Get the packaged app path
 const SSL_KEY_PATH = path.join(appPath, "ssl.key"); // Adjust path accordingly
@@ -69,7 +69,7 @@ const createServer = () => {
     const corsOptions = {
       origin: (origin, callback) => {
         console.log("Origin:", origin);
-        if (!origin || allowedOrigins.includes(origin)) {
+        if (!origin || allowedOrigins.filter((allowedOrigin) => origin.startsWith(allowedOrigin)).length > 0) {
           console.log("Origin allowed:", origin);
           callback(null, true);
         } else {
@@ -79,7 +79,7 @@ const createServer = () => {
       },
     };
 
-    // server.use(cors(corsOptions));
+    server.use(cors(corsOptions));
 
     /**
      * Endpoint: Get information about all active sessions
@@ -194,8 +194,8 @@ const createWebSocketServer = () => {
 // Create the Electron window
 const createWindow = () => {
   const win = new BrowserWindow({
-    width: "100%",
-    height: "100%",
+    width: 400,
+    height: 200,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: true,
