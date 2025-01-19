@@ -1,14 +1,13 @@
 const { app, BrowserWindow, autoUpdater, protocol } = require("electron");
 
 const express = require("express");
-const { spawn, exec } = require("child_process");
-const kill = require("tree-kill");
+const kill = require('tree-kill');
 const crypto = require("crypto");
 const { WebSocketServer } = require("ws");
 const cors = require("cors");
-const https = require("https");
 const fs = require("fs");
 const path = require("path");
+const pty = require("node-pty");
 
 app.whenReady().then(() => {
   protocol.handle("teja-util", (request, callback) => {
@@ -69,12 +68,7 @@ const createServer = () => {
     const corsOptions = {
       origin: (origin, callback) => {
         console.log("Origin:", origin);
-        if (
-          !origin ||
-          allowedOrigins.filter((allowedOrigin) =>
-            origin.startsWith(allowedOrigin)
-          ).length > 0
-        ) {
+        if (!origin || allowedOrigins.filter((allowedOrigin) => origin.startsWith(allowedOrigin)).length > 0) {
           console.log("Origin allowed:", origin);
           callback(null, true);
         } else {
@@ -115,12 +109,16 @@ const createWebSocketServer = () => {
   wss.on("connection", (ws) => {
     // Create a new session when a WebSocket connection is established
     const sessionId = crypto.randomUUID();
-    const childProcess = spawn("cmd.exe"); // Create a persistent command prompt process
+    const childProcess = pty.spawn("cmd.exe", [], {
+      name: "xterm-color",
+      cols: 80,
+      rows: 30,
+      cwd: process.cwd(),
+      env: process.env,
+    }); // Create a persistent command prompt process using node-pty
 
     sessions.set(sessionId, childProcess);
-    console.log(
-      `[Session ${sessionId} ${childProcess.pid}] Created for new WebSocket connection`
-    );
+    console.log(`[Session ${sessionId} ${childProcess.pid}] Created for new WebSocket connection`);
 
     // Send session creation confirmation to the client
     ws.send(
@@ -132,7 +130,7 @@ const createWebSocketServer = () => {
     );
 
     // Handle process output (stdout)
-    childProcess.stdout.on("data", (data) => {
+    childProcess.on("data", (data) => {
       ws.send(
         JSON.stringify({
           action: "command-output",
@@ -143,7 +141,7 @@ const createWebSocketServer = () => {
     });
 
     // Handle process errors (stderr)
-    childProcess.stderr.on("data", (data) => {
+    childProcess.on("error", (data) => {
       ws.send(
         JSON.stringify({
           action: "command-error",
@@ -153,9 +151,6 @@ const createWebSocketServer = () => {
       );
     });
 
-    const interruptProcess = () => {
-      childProcess.kill("SIGINT");
-    }
     const killProcess = () => {
       kill(childProcess.pid, "SIGKILL", (err) => {
         if (err) {
@@ -172,10 +167,8 @@ const createWebSocketServer = () => {
       const { command, action, sessionId } = JSON.parse(message);
 
       if (action === "interrupt") {
-        interruptProcess();
-        console.log(
-          `[Session ${sessionId} ${childProcess.pid}] Session interrupted`
-        );
+        childProcess.write("\x03"); // Send Ctrl+C to interrupt the process
+        console.log(`[Session ${sessionId} ${childProcess.pid}] Session interrupted`);
         return;
       }
       if (!command) {
@@ -197,28 +190,20 @@ const createWebSocketServer = () => {
           })
         );
         killProcess();
-        console.log(
-          `[Session ${sessionId} ${childProcess.pid}] Session ended by client using exit command`
-        );
+        console.log(`[Session ${sessionId} ${childProcess.pid}] Session ended by client using exit command`);
         ws.close();
         return;
       }
-      console.log(
-        `[Session ${sessionId} ${childProcess.pid}] Executing command: ${command}`
-      );
-      childProcess.stdin.write(`${command}\n`);
+      console.log(`[Session ${sessionId} ${childProcess.pid}] Executing command: ${command}`);
+      childProcess.write(`${command}\n`);
     });
 
     // Cleanup on WebSocket close
     ws.on("close", () => {
-      console.log(
-        `[Session ${sessionId} ${childProcess.pid}] WebSocket connection closed`
-      );
+      console.log(`[Session ${sessionId} ${childProcess.pid}] WebSocket connection closed`);
       if (sessions.has(sessionId)) {
         killProcess();
-        console.log(
-          `[Session ${sessionId} ${childProcess.pid}] Session ended by client using exit command`
-        );
+        console.log(`[Session ${sessionId} ${childProcess.pid}] Session ended by client using exit command`);
       }
     });
   });
@@ -246,9 +231,7 @@ const createWindow = () => {
   win.autoHideMenuBar = true;
   // Fallback to localhost if loading fails
   win.webContents.on("did-fail-load", () => {
-    win.loadURL(
-      "data:text/html,<html><body><h1>Failed to load the app.</h1></body></html>"
-    );
+    win.loadURL("data:text/html,<html><body><h1>Failed to load the app.</h1></body></html>");
   });
 };
 app.on("ready", () => {
