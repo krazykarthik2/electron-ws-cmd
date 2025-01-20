@@ -2,6 +2,7 @@ const { app, BrowserWindow, autoUpdater, protocol } = require("electron");
 
 const express = require("express");
 const { spawn, exec } = require("child_process");
+const process = require("process");
 const kill = require("tree-kill");
 const crypto = require("crypto");
 const { WebSocketServer } = require("ws");
@@ -55,7 +56,18 @@ const httpsOptions = {
 };
 
 const sessions = new Map(); // To store session IDs and their child processes
-
+const killProcess = (pid, sessionId, then = () => {}) => {
+  console.log("killing PID", pid);
+  exec(`taskkill /pid ${pid} /t /f`, (err) => {
+    if (err) {
+      console.error("Failed to kill process:", err);
+    } else {
+      console.log("Process killed successfully");
+    }
+    sessions.delete(sessionId); // Remove session
+    then();
+  });
+};
 // Create an Express server (for backward compatibility)
 const createServer = () => {
   try {
@@ -115,9 +127,15 @@ const createWebSocketServer = () => {
   wss.on("connection", (ws) => {
     // Create a new session when a WebSocket connection is established
     const sessionId = crypto.randomUUID();
-    const childProcess = spawn("cmd.exe"); // Create a persistent command prompt process
+    const childProcess = spawn("cmd.exe", [], {
+      detached: false,
+      shell: false,
+      stdio: "pipe",
+      killSignal: "SIGKILL",
+    }); // Create a persistent command prompt process
 
-    sessions.set(sessionId, childProcess);
+    console.log("childProcess:PID:", childProcess.pid);
+    sessions.set(sessionId, childProcess.pid.toString());
     console.log(
       `[Session ${sessionId} ${childProcess.pid}] Created for new WebSocket connection`
     );
@@ -155,21 +173,11 @@ const createWebSocketServer = () => {
 
     const interruptProcess = () => {
       childProcess.kill("SIGINT");
-    }
-    const killProcess = () => {
-      kill(childProcess.pid, "SIGKILL", (err) => {
-        if (err) {
-          console.error("Failed to kill process:", err);
-        } else {
-          console.log("Process killed successfully");
-        }
-      });
-      sessions.delete(sessionId); // Remove session
     };
 
     // Handle WebSocket messages (commands from client)
     ws.on("message", (message) => {
-      const { command, action, sessionId } = JSON.parse(message);
+      const { command, action } = JSON.parse(message);
 
       if (action === "interrupt") {
         interruptProcess();
@@ -196,7 +204,7 @@ const createWebSocketServer = () => {
             message: `Session ${sessionId} ${childProcess.pid} exited successfully`,
           })
         );
-        killProcess();
+        killProcess(childProcess.pid, sessionId);
         console.log(
           `[Session ${sessionId} ${childProcess.pid}] Session ended by client using exit command`
         );
@@ -215,7 +223,7 @@ const createWebSocketServer = () => {
         `[Session ${sessionId} ${childProcess.pid}] WebSocket connection closed`
       );
       if (sessions.has(sessionId)) {
-        killProcess();
+        killProcess(childProcess.pid, sessionId);
         console.log(
           `[Session ${sessionId} ${childProcess.pid}] Session ended by client using exit command`
         );
@@ -258,12 +266,34 @@ app.on("ready", () => {
   autoUpdater.checkForUpdates();
 });
 
+const killFirstSession = (then = null) => {
+  if (sessions.size != 0) {
+    const sessionId = sessions.keys().next().value;
+    console.log("killing session", sessionId);
+    killProcess(sessions.get(sessionId), sessionId, () => killFirstSession(then));
+  }else{
+    if(then)then();
+  }
+};
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
-    app.quit();
+    console.log("killing all sessions");
+    console.log("sessions", sessions);
+    killFirstSession(() => {
+      console.log("quitting app in background,map:", sessions);
+      app.quit();
+    });
   }
 });
-
+app.on("second-instance", () => {
+  // Someone tried to run a second instance, we should focus our window.
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createWindow();
+  }
+  else {
+    BrowserWindow.getAllWindows()[0].focus();
+  }
+})
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
