@@ -71,12 +71,11 @@ const PORT = 4593; // REST API at http://localhost:PORT
 const WSPORT_CMD = 4594; // WebSocket at ws://localhost:WSPORT_CMD
 const WSPORT_BATCH = 4595; // WebSocket at ws://localhost:WSPORT_BATCH
 
-const HTML_URL_FILE = `data:text/html,<html><head><meta charset=UTF-8 /><meta content="width=device-width,initial-scale=1"name=viewport /><title>teja-util-daemon</title><style></style></head><body><h1>TEJA-UTIL DAEMON v${app.getVersion()}</h1><button onclick=fetchSessions()>Refresh</button><div id=sess></div><div id=err></div></body></html>`;
-const HTML_STYLE = ` body { background: #000; color: #fff; font-family: sans-serif; } #sess { display: flex; flex-direction: column; gap: 10px; } .session { display: flex; flex-direction: row; gap: 10px; } #err { color: #da1616; } `;
-const HTML_SCRIPT = `console.log('script loaded and running'); const sess = document.querySelector("#sess"); const fetchSessions = async () => { try { const response = await fetch("http://localhost:${PORT}/sessions"); const data = await response.json(); sess.innerHTML = data.map((session) => "<div class=session>Session ID: " + session.id + "</div>" ).join(""); } catch (e) { console.error(e); const errDiv = document.createElement("div"); errDiv.innerText = e; document.querySelector("#err").appendChild(errDiv); } }; `;
-
+const HTML_URL_FILE = `data:text/html,<html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>teja-util-daemon</title></head><body><h1>TEJA-UTIL DAEMON</h1><div id="sess"></div><div id="batches"></div><div id="err"></div></body></html>`;
+const HTML_STYLE = `body{background: #000;color: #fff;font-family: sans-serif;} #sess, #batches {display: flex;flex-direction: column;gap: 10px;}.session, .batch {display: flex;flex-direction: row;gap: 10px;}#err {color: rgb(218, 22, 22);}`;
+const HTML_SCRIPT = `  const sess = document.querySelector("#sess");const batches = document.querySelector("#batches");const fetchSessions = async () => {try {const response = await fetch("http://localhost:${PORT}/sessions");const data = await response.json();console.log(response, data);sess.innerHTML = "";data.forEach((session) => {const sessDiv = document.createElement("div");sessDiv.classList.add("session");sessDiv.innerHTML = "<div>Session ID: " + session + "</div>";sess.appendChild(sessDiv);});} catch (e) {console.log(e);document.querySelector("#err").innerHTML = e;}};const fetchBatches = async () => {try {const response = await fetch("http://localhost:${PORT}/batches");const data = await response.json();console.log(response, data);batches.innerHTML = "";data.forEach((batch) => {const batchDiv = document.createElement("div");batchDiv.classList.add("batch");batchDiv.innerHTML = "<div>Batch ID: " + batch + "</div>";batches.appendChild(batchDiv);});} catch (e) {console.log(e);document.querySelector("#err").innerHTML = e;}};setTimeout(() => {setInterval(fetchSessions, 1000);setInterval(fetchBatches, 1000);}, 2000);`;
 const appPath = app.getAppPath(); // Get the packaged app path
-const SSL_KEY_PATH = path.join(appPath, "ssl.key"); // Adjust path accordingly
+const SSL_KEY_PATH = path.join(appPath, "ssl.key"); // Adjusst path accordingly
 const SSL_CERT_PATH = path.join(appPath, "ssl.cert");
 
 // Generate HTTPS server options
@@ -101,7 +100,10 @@ const killSessionProcess = (pid, sessionId, then = () => {}) => {
   });
 };
 const killBatchProcess = (pid, batchId, then = () => {}) => {
-  if(pid==null){console.log("null pid at killBatchProcess"+batchId);return;}
+  if (pid == null) {
+    console.log("null pid at killBatchProcess" + batchId);
+    return;
+  }
   console.log("killing PID", pid);
   exec(`taskkill /pid ${pid} /t /f`, (err) => {
     if (err) {
@@ -289,20 +291,22 @@ const createWebSocketServer = () => {
 //-----------------WS-for-batch-----------------
 const createWebSocketServerBatch = () => {
   const wss = new WebSocketServer({ port: WSPORT_BATCH });
+  wss.on('ping', () => {
+    console.log('ping received');
+    wss.clients.forEach((client) => {
+      client.send('pong');
+    });
+  });
   wss.on("connection", (ws) => {
     // Create a new session when a WebSocket connection is established
     const batchId = crypto.randomUUID();
-
-    batches.set(batchId,null);
-    console.log(
-      `[Batch ${batchId}] Created for new WebSocket connection`
-    );
-
+    batches.set(batchId, null);
+    console.log(`[Batch ${batchId}] Created for new WebSocket connection`);
     // Send session creation confirmation to the client
     ws.send(
       JSON.stringify({
         action: "batch-created",
-        sessionId: batchId,
+        batchId: batchId,
         output: `Batch ${batchId}  created successfully`,
       })
     );
@@ -341,12 +345,23 @@ async function handleMessage(msg, batchId, ws) {
     const batchFilePath = path.join(isolatedFolder, "batch.json");
     fs.writeFileSync(batchFilePath, JSON.stringify(command));
     console.log("Batch file written to", batchFilePath);
+    beforeEachExec = (name) => {
+      ws.send(
+        JSON.stringify({
+          action: "line-started",
+          sessionId: batchId,
+          output: `Command with ${name} started`,
+          lineId: name,
+        })
+      );
+    };
     afterEachExec = (name, code) => {
       ws.send(
         JSON.stringify({
           action: "line-executed",
           sessionId: batchId,
           output: `Command with ${name} executed with code ${code}`,
+          lineId:name,
         })
       );
     };
@@ -354,7 +369,7 @@ async function handleMessage(msg, batchId, ws) {
       ws.send(
         JSON.stringify({
           action: "batch-executed",
-          sessionId: batchId,
+          batchId: batchId,
           output: `Batch ${batchId} ${batches.get(
             batchId
           )} executed successfully`,
@@ -369,6 +384,7 @@ async function handleMessage(msg, batchId, ws) {
       batchFilePath,
       batchId,
       setCurrentProcess,
+      beforeEachExec,
       afterEachExec,
       afterReport,
       ws
@@ -411,6 +427,7 @@ const startExecution = async (
   batchFilePath,
   batchId,
   setCurrentProcess,
+  beforeEachExec,
   afterEachExec,
   afterReport,
   ws
@@ -418,8 +435,9 @@ const startExecution = async (
   try {
     const batchFile = fs.readFileSync(batchFilePath);
     const batchjson = JSON.parse(batchFile);
-    const prevCwd = process.cwd()+"/isolated-" + batchId + "-batch";
+    const prevCwd = process.cwd() + "/isolated-" + batchId + "-batch";
     for (const { name, command } of batchjson.exec) {
+      beforeEachExec(name);
       console.log("Executing command:", command, "with name:", name);
       childProcess = spawn("cmd.exe", ["/c", command], {
         cwd: prevCwd,
@@ -435,8 +453,9 @@ const startExecution = async (
         ws.send(
           JSON.stringify({
             action: "batch-output",
-            sessionId: batchId,
+            batchId: batchId,
             output: data.toString(),
+            lineId: name,
           })
         );
       });
@@ -446,8 +465,9 @@ const startExecution = async (
         ws.send(
           JSON.stringify({
             action: "batch-error",
-            sessionId: batchId,
+            batchId: batchId,
             error: data.toString(),
+            lineId: name,
           })
         );
       });
@@ -455,7 +475,7 @@ const startExecution = async (
       await new Promise((resolve, reject) => {
         let commandExited = false;
 
-        const onExit = (code,) => {
+        const onExit = (code) => {
           if (!commandExited) {
             commandExited = true;
             console.log("Command finished with code", code);
@@ -463,9 +483,9 @@ const startExecution = async (
             resolve();
           }
         };
-//////////////TODO: set prevcwd to the cwd of the command
+        //////////////TODO: set prevcwd to the cwd of the command
         childProcess.stdin.write(`${command}\n`);
-        
+
         // Listen for exit event for each command
         childProcess.once("exit", onExit);
       });

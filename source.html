@@ -5,12 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>teja-util-daemon</title>
     <style>
-      #sess, #batches {
+      body {
+        background: #000;
+        color: #fff;
+        font-family: sans-serif;
+      }
+      #sess,
+      #batches {
         display: flex;
         flex-direction: column;
         gap: 10px;
       }
-      .session, .batch {
+      .session,
+      .batch {
         display: flex;
         flex-direction: row;
         gap: 10px;
@@ -25,6 +32,7 @@
     <div id="sess"></div>
     <div id="batches"></div>
     <div id="err"></div>
+
     <script>
       const sess = document.querySelector("#sess");
       const batches = document.querySelector("#batches");
@@ -33,18 +41,12 @@
         try {
           const response = await fetch("http://localhost:${PORT}/sessions");
           const data = await response.json();
+          console.log(response, data);
           sess.innerHTML = "";
           data.forEach((session) => {
             const sessDiv = document.createElement("div");
             sessDiv.classList.add("session");
-            sessDiv.innerHTML =
-              "<div>Session ID: " +
-              session.id +
-              "</div><div>Command: " +
-              session.command +
-              "</div><div>Started At: " +
-              session.startedAt +
-              "</div>";
+            sessDiv.innerHTML = "<div>Session ID: " + session + "</div>";
             sess.appendChild(sessDiv);
           });
         } catch (e) {
@@ -57,18 +59,12 @@
         try {
           const response = await fetch("http://localhost:${PORT}/batches");
           const data = await response.json();
+          console.log(response, data);
           batches.innerHTML = "";
           data.forEach((batch) => {
             const batchDiv = document.createElement("div");
             batchDiv.classList.add("batch");
-            batchDiv.innerHTML =
-              "<div>Batch ID: " +
-              batch.id +
-              "</div><div>Task: " +
-              batch.task +
-              "</div><div>Created At: " +
-              batch.createdAt +
-              "</div>";
+            batchDiv.innerHTML = "<div>Batch ID: " + batch + "</div>";
             batches.appendChild(batchDiv);
           });
         } catch (e) {
