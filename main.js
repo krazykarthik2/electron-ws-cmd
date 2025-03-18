@@ -349,17 +349,17 @@ async function handleMessage(msg, batchId, ws) {
       ws.send(
         JSON.stringify({
           action: "line-started",
-          sessionId: batchId,
+          batchId: batchId,
           output: `Command with ${name} started`,
           lineId: name,
         })
       );
     };
-    afterEachExec = (name, code) => {
+    afterEachExec = (name, code) => { 
       ws.send(
         JSON.stringify({
           action: "line-executed",
-          sessionId: batchId,
+          batchId: batchId,
           output: `Command with ${name} executed with code ${code}`,
           lineId:name,
         })
@@ -393,7 +393,7 @@ async function handleMessage(msg, batchId, ws) {
     sayGoodbyeBatch();
     console.log("Batch execution completed");
   }
-  if (!command) {
+  if (!command) {    
     ws.send(
       JSON.stringify({
         action: "error",
