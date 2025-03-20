@@ -8,7 +8,7 @@ const {
 
 const express = require("express");
 const { spawn, exec } = require("child_process");
-const process = require("process");
+const process = require("process"); 
 const kill = require("tree-kill");
 const crypto = require("crypto");
 const { WebSocketServer } = require("ws");
@@ -16,6 +16,7 @@ const cors = require("cors");
 const https = require("https");
 const fs = require("fs");
 const path = require("path");
+
 
 app.whenReady().then(() => {
   protocol.handle("teja-util", (request, callback) => {
@@ -158,6 +159,33 @@ const createServer = () => {
       const batchData = Array.from(batches.keys());
       res.status(200).send(batchData || "No batches found");
     });
+    server.delete("/sessions:sessionId", (req, res) => {
+      const sessionId = req.params.sessionId;
+      console.log("DELETE /sessions:sessionId", sessionId);
+      const childProcess = sessions.get(sessionId);
+      if (childProcess) {
+        killSessionProcess(childProcess, sessionId, () => {
+          res.status(200).send(`Session ${sessionId} deleted successfully`); // Send success response
+        });
+      } else {
+        res.status(404).send(`Session ${sessionId} not found`); // Send not found response
+      }
+
+    }); 
+
+    server.delete("/batches:batchId", (req, res) => {
+      const batchId = req.params.batchId;
+      console.log("DELETE /batches:batchId", batchId);
+      const childProcess = batches.get(batchId);
+      if (childProcess) {
+        killBatchProcess(childProcess, batchId, () => {
+          res.status(200).send(`Batch ${batchId} deleted successfully`); // Send success response
+        });
+      } else {
+        res.status(404).send(`Batch ${batchId} not found`); // Send not found response
+      }
+    });
+
 
     try {
       server.listen(PORT, () => {
@@ -181,7 +209,7 @@ const createWebSocketServer = () => {
     const sessionId = crypto.randomUUID();
     const childProcess = spawn("cmd.exe", [], {
       detached: false,
-      shell: false,
+      shell: true,
       stdio: "pipe",
       killSignal: "SIGKILL",
     }); // Create a persistent command prompt process
@@ -443,7 +471,7 @@ const startExecution = async (
       childProcess = spawn("cmd.exe", ["/c", command], {
         cwd: prevCwd,
         detached: false,
-        shell: false,
+        shell: true,
         stdio: "pipe",
         killSignal: "SIGKILL",
       }); // Create a persistent command prompt process
