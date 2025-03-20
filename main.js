@@ -391,6 +391,7 @@ async function handleMessage(msg, batchId, ws) {
     );
 
     sayGoodbyeBatch();
+
     console.log("Batch execution completed");
   }
   if (!command) {    
@@ -485,7 +486,6 @@ const startExecution = async (
         };
         //////////////TODO: set prevcwd to the cwd of the command
         childProcess.stdin.write(`${command}\n`);
-
         // Listen for exit event for each command
         childProcess.once("exit", onExit);
       });
@@ -569,18 +569,22 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     console.log("killing all sessions");
     console.log("sessions", sessions);
+    //delete all the isolated folders
+    console.log("deleting isolated folders");
+    const appPath = app.getAppPath(); // Get the packaged app path
+    const isolatedFolders = fs.readdirSync(appPath).filter((file) => {
+      return file.startsWith("isolated-");
+    });
+    for (const folder of isolatedFolders) {
+      fs.rmdirSync(path.join(appPath, folder), { recursive: true });
+    }
+    console.log("isolated folders deleted");
+    console.log("killing all sessions");
     killFirstSession(() => {
+      console.log("killed all sessions");
       killFirstBatch(() => {
+        console.log("killed all batches");
         console.log("quitting app in background,map:", sessions);
-        //delete all the isolated folders
-        console.log("deleting isolated folders");
-        const appPath = app.getAppPath(); // Get the packaged app path
-        const isolatedFolders = fs.readdirSync(appPath).filter((file) => {
-          return file.startsWith("isolated-");
-        });
-        for (const folder of isolatedFolders) {
-          fs.rmdirSync(path.join(appPath, folder), { recursive: true });
-        }
         app.quit();
       });
     });
