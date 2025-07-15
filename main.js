@@ -74,7 +74,7 @@ const WSPORT_BATCH = 4595; // WebSocket at ws://localhost:WSPORT_BATCH
 
 const HTML_URL_FILE = `data:text/html,<html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>teja-util-daemon</title></head><body><h1>TEJA-UTIL DAEMON</h1><div id="sess"></div><div id="batches"></div><div id="err"></div></body></html>`;
 const HTML_STYLE = `body{background: #000;color: #fff;font-family: sans-serif;} #sess, #batches {display: flex;flex-direction: column;gap: 10px;}.session, .batch {display: flex;flex-direction: row;gap: 10px;}#err {color: rgb(218, 22, 22);}`;
-const HTML_SCRIPT = `  const sess = document.querySelector("#sess");const batches = document.querySelector("#batches");const fetchSessions = async () => {try {const response = await fetch("http://localhost:${PORT}/sessions");const data = await response.json();console.log(response, data);sess.innerHTML = "";data.forEach((session) => {const sessDiv = document.createElement("div");sessDiv.classList.add("session");sessDiv.innerHTML = "<div>Session ID: " + session + "</div>";sess.appendChild(sessDiv);});} catch (e) {console.log(e);document.querySelector("#err").innerHTML = e;}};const fetchBatches = async () => {try {const response = await fetch("http://localhost:${PORT}/batches");const data = await response.json();console.log(response, data);batches.innerHTML = "";data.forEach((batch) => {const batchDiv = document.createElement("div");batchDiv.classList.add("batch");batchDiv.innerHTML = "<div>Batch ID: " + batch + "</div>";batches.appendChild(batchDiv);});} catch (e) {console.log(e);document.querySelector("#err").innerHTML = e;}};setTimeout(() => {setInterval(fetchSessions, 1000);setInterval(fetchBatches, 1000);}, 2000);`;
+const HTML_SCRIPT = `  const sess = document.querySelector("#sess");const batches = document.querySelector("#batches");const fetchSessions = async () => {try {const response = await fetch("http://localhost:${PORT}/sessions");const data = await response.json();console.log(response, data);sess.innerHTML = ""; data.forEach((session) => {const sessDiv = document.createElement("div");sessDiv.classList.add("session");sessDiv.innerHTML = "<div>Session ID: " + session + "</div>";sess.appendChild(sessDiv);});} catch (e) {console.log(e);document.querySelector("#err").innerHTML = e;}};const fetchBatches = async () => {try {const response = await fetch("http://localhost:${PORT}/batches");const data = await response.json();console.log(response, data);batches.innerHTML = "";data.forEach((batch) => {const batchDiv = document.createElement("div");batchDiv.classList.add("batch");batchDiv.innerHTML = "<div>Batch ID: " + batch + "</div>";batches.appendChild(batchDiv);});} catch (e) {console.log(e);document.querySelector("#err").innerHTML = e;}};setTimeout(() => {setInterval(fetchSessions, 1000);setInterval(fetchBatches, 1000);}, 2000);`;
 const appPath = app.getAppPath(); // Get the packaged app path
 const SSL_KEY_PATH = path.join(appPath, "ssl.key"); // Adjusst path accordingly
 const SSL_CERT_PATH = path.join(appPath, "ssl.cert");
@@ -368,14 +368,17 @@ async function handleMessage(msg, batchId, ws) {
     return;
   }
   if (command) {
-    const isolatedFolder = path.join(appPath, "isolated-" + batchId + "-batch");
+    let __appPath = appPath.split("\\").join("").endsWith(".asar")? appPath.replaceAll("app.asar\\","").replaceAll("app.asar",""):appPath;
+    const isolatedFolder = path.join(__appPath, "isolated-" + batchId + "-batch");
+    console.log("isolatedFolder", isolatedFolder);
+    
     fs.mkdirSync(isolatedFolder);
     const batchFilePath = path.join(isolatedFolder, "batch.json");
     fs.writeFileSync(batchFilePath, JSON.stringify(command));
     console.log("Batch file written to", batchFilePath);
     beforeEachExec = (name) => {
       ws.send(
-        JSON.stringify({
+        JSON.stringify({ 
           action: "line-started",
           batchId: batchId,
           output: `Command with ${name} started`,
@@ -468,13 +471,13 @@ const startExecution = async (
     for (const { name, command } of batchjson.exec) {
       beforeEachExec(name);
       console.log("Executing command:", command, "with name:", name);
-      childProcess = spawn("cmd.exe", ["/c", command], {
-        cwd: prevCwd,
+      const childProcess = spawn("cmd.exe", ["/c", command], {
+        cwd: process.cwd(),
         detached: false,
-        shell: true,
-        stdio: "pipe",
+        stdio: "pipe", 
         killSignal: "SIGKILL",
-      }); // Create a persistent command prompt process
+        shell: true,
+      });
       console.log("childProcess PID:", childProcess.pid);
 
       // Handle process output (stdout)
